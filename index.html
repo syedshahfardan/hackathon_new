@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaintainIQ - Auth</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+<div class="bg-white rounded-xl shadow-sm p-8 w-full max-w-md">
+  <div class="text-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">MaintainIQ</h1>
+    <p class="text-sm text-gray-500">AI-Powered QR Maintenance & Asset History Platform</p>
+  </div>
+
+  <div id="errorBox" class="hidden bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 border border-red-200"></div>
+
+  <form id="signInForm" class="space-y-4">
+    <h2 class="text-lg font-semibold text-gray-800">Sign In</h2>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Email Address</label>
+      <input type="email" id="loginEmail" required class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="you@example.com">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Password</label>
+      <input type="password" id="loginPassword" required class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••">
+    </div>
+    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+      Sign In
+    </button>
+    <p class="text-xs text-center text-gray-500 mt-2">
+      Don't have an account? <button type="button" onclick="toggleForm(true)" class="text-blue-600 hover:underline font-medium">Sign Up</button>
+    </p>
+  </form>
+
+  <form id="signUpForm" class="space-y-4 hidden">
+    <h2 class="text-lg font-semibold text-gray-800">Create Account</h2>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Full Name</label>
+      <input type="text" id="regName" required class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="John Doe">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Email Address</label>
+      <input type="email" id="regEmail" required class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="you@example.com">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Password</label>
+      <input type="password" id="regPassword" required class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••">
+    </div>
+    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition">
+      Register
+    </button>
+    <p class="text-xs text-center text-gray-500 mt-2">
+      Already have an account? <button type="button" onclick="toggleForm(false)" class="text-blue-600 hover:underline font-medium">Sign In</button>
+    </p>
+  </form>
+
+</div>
+
+<script src="shared.js"></script>
+<script>
+  ensureSeeded();
+
+  // Elements
+  const signInForm = document.getElementById('signInForm');
+  const signUpForm = document.getElementById('signUpForm');
+  const errorBox = document.getElementById('errorBox');
+
+  // Toggle between Sign In and Sign Up views
+  function toggleForm(showSignUp) {
+    errorBox.classList.add('hidden');
+    if (showSignUp) {
+      signInForm.classList.add('hidden');
+      signUpForm.classList.remove('hidden');
+    } else {
+      signUpForm.classList.add('hidden');
+      signInForm.classList.remove('hidden');
+    }
+  }
+
+  // Get users database from localStorage or fallback to an empty array
+  function getUsers() {
+    const users = localStorage.getItem('maintainiq_users');
+    return users ? JSON.parse(users) : [];
+  }
+
+  // Handle Login
+  signInForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    errorBox.classList.add('hidden');
+
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    // 1. Admin Override Check
+    if (email === 'theskextra@gmail.com' && password === '123456789') {
+      window.location.href = 'dashboard.html';
+      return;
+    }
+
+    // 2. Regular User Check
+    const users = getUsers();
+    const matchedUser = users.find(u => u.email === email && u.password === password);
+
+    if (matchedUser) {
+      // Get the first available asset code to pass to client.html (as your original setup did)
+      const assets = load(KEYS.assets) || [];
+      const defaultCode = assets.length > 0 ? assets[0].code : 'default';
+      
+      window.location.href = `client.html?code=${defaultCode}`;
+    } else {
+      errorBox.textContent = 'Invalid email or password.';
+      errorBox.classList.remove('hidden');
+    }
+  });
+
+  // Handle Registration
+  signUpForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    errorBox.classList.add('hidden');
+
+    const name = document.getElementById('regName').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+
+    // Prevent signing up with admin email to protect credentials
+    if (email === 'theskextra@gmail.com') {
+      errorBox.textContent = 'This email is reserved.';
+      errorBox.classList.remove('hidden');
+      return;
+    }
+
+    const users = getUsers();
+    
+    // Check if user already exists
+    if (users.some(u => u.email === email)) {
+      errorBox.textContent = 'An account with this email already exists.';
+      errorBox.classList.remove('hidden');
+      return;
+    }
+
+    // Save user to simulated local storage database
+    users.push({ name, email, password });
+    localStorage.setItem('maintainiq_users', JSON.stringify(users));
+
+    alert('Account created successfully! Please sign in.');
+    toggleForm(false);
+    document.getElementById('loginEmail').value = email;
+  });
+</script>
+</body>
+</html>
