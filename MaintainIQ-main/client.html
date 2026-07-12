@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaintainIQ — Report an Issue</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+<div class="w-full max-w-md">
+  <a href="index.html" class="text-xs text-gray-400 hover:underline">← Logout / Home</a>
+
+  <div id="content" class="bg-white rounded-xl shadow-sm p-6 mt-2">
+    <p class="text-gray-400 text-center py-10">Loading...</p>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+ensureSeeded();
+
+// ADDED THIS HELPER FUNCTION TO PREVENT RUNTIME ERRORS
+function badge(status, colorMap) {
+  const cls = colorMap[status] || "bg-gray-100 text-gray-800";
+  return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold ${cls}">${status}</span>`;
+}
+
+const code = getParam("code");
+const assetsList = load(KEYS.assets) || [];
+const asset = assetsList.find(a => a.code === code);
+const box = document.getElementById("content");
+
+if (!asset) {
+  box.innerHTML = `<p class="text-red-600 text-center">Asset not found. <a href="index.html" class="text-blue-600 underline">Go back</a></p>`;
+} else if (asset.status === "Retired") {
+  box.innerHTML = `
+    <h1 class="text-xl font-bold text-gray-800">${asset.name}</h1>
+    <p class="text-xs font-mono text-gray-500 mb-3">${asset.code}</p>
+    ${badge(asset.status, STATUS_COLORS)}
+    <p class="text-center text-gray-400 text-sm mt-4">This asset has been retired and is no longer in active use.</p>
+  `;
+} else {
+  box.innerHTML = `
+    <h1 class="text-xl font-bold text-gray-800">${asset.name}</h1>
+    <p class="text-xs font-mono text-gray-500 mb-3">${asset.code}</p>
+    <div class="mb-4">${badge(asset.status, STATUS_COLORS)}</div>
+    
+    <h2 class="font-bold text-gray-800 text-sm mb-2">Update Asset Details</h2>
+    <div class="grid grid-cols-1 gap-3 text-sm mb-6 bg-gray-50 p-3 rounded-lg border">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Category</label>
+        <select id="editCategory" class="w-full px-2 py-1 border rounded bg-white text-sm">
+          <option value="Electrical">Electrical</option>
+          <option value="Mechanical">Mechanical</option>
+          <option value="HVAC">HVAC</option>
+          <option value="Plumbing">Plumbing</option>
+          <option value="IT / Infrastructure">IT / Infrastructure</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Location</label>
+        <input type="text" id="editLocation" class="w-full px-2 py-1 border rounded bg-white text-sm" placeholder="e.g. Room 404, Floor 2" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Condition</label>
+        <select id="editCondition" class="w-full px-2 py-1 border rounded bg-white text-sm">
+          <option value="Good">Good</option>
+          <option value="Fair">Fair</option>
+          <option value="Poor">Poor</option>
+          <option value="Broken">Broken</option>
+        </select>
+      </div>
+    </div>
+
+    <h2 class="font-bold text-gray-800 mb-2">Report an Issue</h2>
+    <form id="reportForm" class="space-y-3">
+      <textarea id="complaint" required rows="3" placeholder="Describe the problem..."
+        class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+
+      <button type="button" id="triageBtn" class="text-sm text-blue-600 hover:underline flex items-center gap-1">✨ Get AI suggestion (optional)</button>
+
+      <div id="aiBox" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm space-y-2">
+        <p class="text-xs text-blue-700 font-medium">AI Suggestion — review and edit before submitting</p>
+        <input id="aiTitle" class="w-full px-2 py-1 border rounded text-sm" placeholder="Title" />
+        <div class="flex gap-2">
+          <select id="aiCategory" class="flex-1 px-2 py-1 border rounded text-xs">
+            <option>Electrical</option><option>Mechanical</option><option>Leakage / Performance</option>
+            <option>Software / Network</option><option>Other</option>
+          </select>
+          <select id="aiPriority" class="flex-1 px-2 py-1 border rounded text-xs">
+            <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+          </select>
+        </div>
+        <textarea id="aiCauses" rows="2" class="w-full px-2 py-1 border rounded text-xs" placeholder="Possible causes"></textarea>
+        <textarea id="aiChecks" rows="2" class="w-full px-2 py-1 border rounded text-xs" placeholder="Safe initial checks"></textarea>
+      </div>
+
+      <input id="reporterName" placeholder="Your name" class="w-full px-3 py-2 border rounded-lg text-sm" />
+      <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition">Submit Report</button>
+      <p id="successMsg" class="hidden text-green-600 text-sm text-center mt-2 bg-green-50 p-3 rounded-lg border border-green-200"></p>
+    </form>
+  `;
+
+  const categorySelect = document.getElementById("editCategory");
+  const locationInput = document.getElementById("editLocation");
+  const conditionSelect = document.getElementById("editCondition");
+
+  if (asset.category) categorySelect.value = asset.category;
+  if (asset.location) locationInput.value = asset.location;
+  if (asset.condition) conditionSelect.value = asset.condition;
+
+  document.getElementById("triageBtn").addEventListener("click", () => {
+    const complaint = document.getElementById("complaint").value.trim();
+    if (!complaint) { alert("Describe the issue first."); return; }
+    const r = mockTriage(complaint);
+    document.getElementById("aiTitle").value = r.title;
+    document.getElementById("aiCategory").value = r.category;
+    document.getElementById("aiPriority").value = r.priority;
+    document.getElementById("aiCauses").value = r.causes;
+    document.getElementById("aiChecks").value = r.checks;
+    document.getElementById("aiBox").classList.remove("hidden");
+  });
+
+  document.getElementById("reportForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const complaint = document.getElementById("complaint").value.trim();
+    const aiUsed = !document.getElementById("aiBox").classList.contains("hidden");
+
+    const issues = load(KEYS.issues) || [];
+    const issueNumber = "ISS-" + Math.random().toString(36).slice(2, 7).toUpperCase();
+    const newIssue = {
+      id: uid(), 
+      issueNumber, 
+      assetId: asset.id,
+      title: aiUsed ? document.getElementById("aiTitle").value : complaint.slice(0, 60),
+      description: complaint,
+      category: aiUsed ? document.getElementById("aiCategory").value : "Other",
+      priority: aiUsed ? document.getElementById("aiPriority").value : "Medium",
+      status: "Reported",
+      reporterName: document.getElementById("reporterName").value || "Anonymous",
+      aiSuggested: aiUsed,
+      createdAt: new Date().toISOString(),
+    };
+    issues.push(newIssue);
+    save(KEYS.issues, issues);
+
+    const currentAssets = load(KEYS.assets) || [];
+    const idx = currentAssets.findIndex(a => a.id === asset.id);
+    if (idx !== -1) {
+      currentAssets[idx].category = categorySelect.value;
+      currentAssets[idx].location = locationInput.value.trim() || "—";
+      currentAssets[idx].condition = conditionSelect.value;
+      currentAssets[idx].status = "Issue Reported"; 
+      save(KEYS.assets, currentAssets);
+    }
+
+    logHistory(asset.id, `Issue reported: ${newIssue.title} (Asset details updated by client)`, newIssue.reporterName, newIssue.id);
+
+    e.target.reset();
+    document.getElementById("aiBox").classList.add("hidden");
+    const msg = document.getElementById("successMsg");
+    msg.innerHTML = `Reported! Your issue number is <strong>${newIssue.issueNumber}</strong>. Updates have been synced to the Dashboard and Maintenance pages.`;
+    msg.classList.remove("hidden");
+  });
+}
+</script>
+</body>
+</html>

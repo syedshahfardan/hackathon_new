@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaintainIQ — Maintenance</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<nav class="bg-white shadow-sm px-4 md:px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+  <div class="flex gap-4 items-center">
+    <a href="index.html" class="text-xl font-bold text-gray-800">MaintainIQ</a>
+    <a href="dashboard.html" class="text-sm text-gray-500 hover:text-blue-600">Dashboard</a>
+    <a href="maintenance.html" class="text-sm font-medium text-blue-600">Maintenance</a>
+  </div>
+</nav>
+
+<main class="max-w-4xl mx-auto p-4 md:p-6">
+  <h1 class="text-xl font-bold text-gray-800 mb-4">Reported Issues</h1>
+
+  <div class="flex flex-col md:flex-row gap-3 mb-4">
+    <input id="searchInput" placeholder="Search by title, issue number, or asset..." class="flex-1 px-3 py-2 border rounded-lg" />
+    <select id="statusFilter" class="px-3 py-2 border rounded-lg">
+      <option value="">All statuses</option>
+    </select>
+    <select id="priorityFilter" class="px-3 py-2 border rounded-lg">
+      <option value="">All priorities</option>
+      <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+    </select>
+  </div>
+
+  <div id="issuesList" class="space-y-3"></div>
+</main>
+
+<div id="issuePanel" class="fixed inset-0 bg-black/40 hidden items-start justify-center z-20 overflow-y-auto py-6">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <div class="flex justify-between items-start mb-4">
+      <h2 id="panelTitle" class="text-lg font-bold text-gray-800"></h2>
+      <button id="closePanel" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+    </div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+ensureSeeded();
+document.getElementById("statusFilter").innerHTML += Object.keys(ISSUE_COLORS).map(s => `<option>${s}</option>`).join("");
+
+function assetOf(issue) {
+  return load(KEYS.assets).find(a => a.id === issue.assetId);
+}
+
+function renderList() {
+  const q = document.getElementById("searchInput").value.toLowerCase();
+  const statusVal = document.getElementById("statusFilter").value;
+  const priorityVal = document.getElementById("priorityFilter").value;
+
+  let issues = load(KEYS.issues).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  issues = issues.filter(i => {
+    const asset = assetOf(i);
+    const matchesQ = i.title.toLowerCase().includes(q) || i.issueNumber.toLowerCase().includes(q) ||
+                      (asset && asset.name.toLowerCase().includes(q));
+    return matchesQ && (statusVal === "" || i.status === statusVal) && (priorityVal === "" || i.priority === priorityVal);
+  });
+
+  const box = document.getElementById("issuesList");
+  if (issues.length === 0) { box.innerHTML = `<p class="text-gray-400 text-center py-10">No issues match.</p>`; return; }
+
+  box.innerHTML = issues.map(i => {
+    const asset = assetOf(i);
+    return `
+    <div class="bg-white rounded-xl shadow-sm p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+         onclick="openIssuePanel('${i.id}')">
+      <div>
+        <p class="font-medium text-gray-800">${i.title}</p>
+        <p class="text-xs text-gray-500">${i.issueNumber} · ${asset ? asset.name : "Unknown asset"} · ${i.priority} priority</p>
+      </div>
+      ${badge(i.status, ISSUE_COLORS)}
+    </div>
+  `;
+  }).join("");
+}
+
+document.getElementById("searchInput").addEventListener("input", renderList);
+document.getElementById("statusFilter").addEventListener("change", renderList);
+document.getElementById("priorityFilter").addEventListener("change", renderList);
+
+function openIssuePanel(id) {
+  const issue = load(KEYS.issues).find(i => i.id === id);
+  if (!issue) return;
+  const asset = assetOf(issue);
+  const records = load(KEYS.records).filter(r => r.issueId === id);
+
+  document.getElementById("panelTitle").textContent = issue.title;
+  document.getElementById("panelBody").innerHTML = `
+    <p class="text-xs font-mono text-gray-500 mb-1">${issue.issueNumber} · ${asset ? asset.name : "Unknown asset"}</p>
+    <div class="mb-3">${badge(issue.status, ISSUE_COLORS)}</div>
+    <p class="text-sm text-gray-700 mb-4">${issue.description}</p>
+
+    <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+      <div><p class="text-gray-500">Priority</p><p class="font-medium">${issue.priority}</p></div>
+      <div><p class="text-gray-500">Category</p><p class="font-medium">${issue.category || "—"}</p></div>
+      <div><p class="text-gray-500">Reporter</p><p class="font-medium">${issue.reporterName || "—"}</p></div>
+      <div><p class="text-gray-500">AI-Suggested</p><p class="font-medium">${issue.aiSuggested ? "Yes" : "No"}</p></div>
+    </div>
+
+    ${asset ? `
+    <div class="bg-gray-50 p-3 rounded-lg border text-xs mb-4">
+      <p class="font-bold text-gray-700 mb-1">Asset Status Details (Updated via Client)</p>
+      <div class="grid grid-cols-3 gap-2">
+        <div><span class="text-gray-500">Category:</span> <span class="font-medium">${asset.category || "—"}</span></div>
+        <div><span class="text-gray-500">Location:</span> <span class="font-medium">${asset.location || "—"}</span></div>
+        <div><span class="text-gray-500">Condition:</span> <span class="font-medium">${asset.condition || "—"}</span></div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="flex gap-2 flex-wrap items-center mb-4 border-t pt-3">
+      <label class="text-sm text-gray-500">Update status:</label>
+      <select id="statusSelect" class="px-2 py-1 border rounded-lg text-sm">
+        ${Object.keys(ISSUE_COLORS).map(s => `<option ${s === issue.status ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+      <button id="updateStatusBtn" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg">Update</button>
+      <button id="deleteIssueBtn" class="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg ml-auto font-medium">Delete Issue</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">Note: add a maintenance note before marking Resolved.</p>
+
+    <div class="border-t pt-3">
+      <h3 class="font-semibold text-sm text-gray-700 mb-2">Add Maintenance Record</h3>
+      <form id="maintForm" class="space-y-2">
+        <textarea id="notes" required rows="2" placeholder="Inspection findings / work performed..." class="w-full px-2 py-1 border rounded-lg text-sm"></textarea>
+        <input id="parts" placeholder="Parts used (optional)" class="w-full px-2 py-1 border rounded-lg text-sm" />
+        <input id="cost" type="number" min="0" step="0.01" placeholder="Cost (0 if none)" class="w-full px-2 py-1 border rounded-lg text-sm" />
+        <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700">Save Record</button>
+      </form>
+    </div>
+
+    <div class="border-t pt-3 mt-3">
+      <h3 class="font-semibold text-sm text-gray-700 mb-2">Maintenance Records (${records.length})</h3>
+      ${records.length === 0 ? `<p class="text-gray-400 text-xs">No records yet.</p>` :
+        records.map(r => `
+          <div class="border rounded-lg p-2 mb-2 text-xs">
+            <p>${r.notes}</p>
+            <p class="text-gray-500 mt-1">Parts: ${r.parts || "—"} · Cost: ${r.cost ?? 0} · ${fmtDate(r.resolvedAt)}</p>
+          </div>
+        `).join("")}
+    </div>
+  `;
+
+  document.getElementById("updateStatusBtn").addEventListener("click", () => {
+    const newStatus = document.getElementById("statusSelect").value;
+    const issues = load(KEYS.issues);
+    const target = issues.find(i => i.id === id);
+
+    if (newStatus === "Resolved") {
+      const hasRecord = load(KEYS.records).some(r => r.issueId === id);
+      if (!hasRecord) { alert("Add a maintenance note before marking Resolved."); return; }
+    }
+
+    target.status = newStatus;
+    save(KEYS.issues, issues);
+    logHistory(target.assetId, `Issue ${target.issueNumber} status → ${newStatus}`, "technician", id);
+
+    const assetStatusMap = { "Inspection Started": "Under Inspection", "Maintenance In Progress": "Under Maintenance", "Resolved": "Operational" };
+    if (assetStatusMap[newStatus]) {
+      const assets = load(KEYS.assets);
+      const a = assets.find(a => a.id === target.assetId);
+      a.status = assetStatusMap[newStatus];
+      save(KEYS.assets, assets);
+    }
+    openIssuePanel(id);
+    renderList();
+  });
+
+  // Delete Issue handler completely clears from storage array
+  document.getElementById("deleteIssueBtn").addEventListener("click", () => {
+    if (confirm(`Are you sure you want to permanently delete issue ${issue.issueNumber} from storage?`)) {
+      const currentIssues = load(KEYS.issues);
+      const filteredIssues = currentIssues.filter(i => i.id !== id);
+      save(KEYS.issues, filteredIssues);
+      
+      logHistory(issue.assetId, `Issue ${issue.issueNumber} permanently deleted`, "technician");
+      
+      document.getElementById("issuePanel").classList.add("hidden");
+      renderList();
+    }
+  });
+
+  document.getElementById("maintForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const cost = parseFloat(document.getElementById("cost").value) || 0;
+    if (cost < 0) { alert("Cost cannot be negative."); return; }
+
+    const records = load(KEYS.records);
+    records.push({
+      id: uid(), issueId: id,
+      notes: document.getElementById("notes").value,
+      parts: document.getElementById("parts").value,
+      cost, resolvedAt: new Date().toISOString(),
+    });
+    save(KEYS.records, records);
+    logHistory(issue.assetId, `Maintenance note added for ${issue.issueNumber}`, "technician", id);
+    openIssuePanel(id);
+  });
+
+  const panel = document.getElementById("issuePanel");
+  panel.classList.remove("hidden"); panel.classList.add("flex");
+}
+
+document.getElementById("closePanel").addEventListener("click", () => {
+  document.getElementById("issuePanel").classList.add("hidden");
+});
+
+renderList();
+
+const preselectedIssue = getParam("issue");
+if (preselectedIssue) openIssuePanel(preselectedIssue);
+</script>
+</body>
+</html>
